@@ -1,5 +1,7 @@
 # `sqlfs`
 
+![](https://travis-ci.org/wangkuiyi/sqlfs.svg?branch=develop)
+
 The package `sqlfs` provides an `io.ReadCloser` and an `io.WriteCloser` that treats a SQL database a filesystem, where each table in the database is like a file.  The schema of the table is very simple -- it has only one column of BLOB type. All the rows consist the storage.
 
 `sqlfs` provides the following features.
