@@ -1,9 +1,12 @@
 package sqlfs
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/gob"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -98,6 +101,86 @@ func TestWriteAndRead(t *testing.T) {
 	assert.NoError(r.Close())
 
 	assert.NoError(DropTable(testDB, fn))
+}
+
+type model struct {
+	unexported string
+	Exported string
+}
+
+var letterRunes = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func RandBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return b
+}
+
+func TestWriteAndReadGob(t *testing.T) {
+	assert := assert.New(t)
+
+	fn := fmt.Sprintf("sqlfs.unitest%d", rand.Int())
+
+	w, e := Create(testDB, fn)
+	assert.NoError(e)
+	assert.NotNil(w)
+
+	// write gob
+	m := model{"unexported string", "Exported string"}
+	e = gob.NewEncoder(w).Encode(m)
+	assert.NoError(e)
+
+	// write bytes
+	rb := RandBytes(2)
+	n, e := w.Write(rb)
+	assert.NoError(e)
+	assert.Equal(len(rb), n)
+
+	assert.NoError(w.Close())
+
+	r, e := Open(testDB, fn)
+	assert.NoError(e)
+	assert.NotNil(r)
+
+	// read gob
+	var mr model
+	e = gob.NewDecoder(r).Decode(&mr)
+	assert.NoError(e)
+	assert.Equal(m.Exported, mr.Exported)
+
+	// read bytes
+	rbr, e := ioutil.ReadAll(r)
+	assert.NoError(e)
+	assert.Equal(rb, rbr)
+
+	assert.NoError(r.Close())
+}
+
+func TestWriteAndReadGobLocal(t *testing.T) {
+	assert := assert.New(t)
+
+	var buf bytes.Buffer
+	// write gob
+	m := model{"unexported string", "Exported string"}
+	e := gob.NewEncoder(&buf).Encode(m)
+	assert.NoError(e)
+	// write bytes
+	rb := RandBytes(2)
+	n, e := buf.Write(rb)
+	assert.NoError(e)
+	assert.Equal(len(rb), n)
+
+	// read gob
+	var mr model
+	e = gob.NewDecoder(&buf).Decode(&mr)
+	assert.NoError(e)
+	assert.Equal(m.Exported, mr.Exported)
+	// read bytes
+	rbr, e := ioutil.ReadAll(&buf)
+	assert.NoError(e)
+	assert.Equal(rb, rbr)
 }
 
 func TestMain(m *testing.M) {
