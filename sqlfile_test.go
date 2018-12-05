@@ -1,6 +1,7 @@
 package sqlfs
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/gob"
 	"fmt"
@@ -155,6 +156,31 @@ func TestWriteAndReadGob(t *testing.T) {
 	assert.Equal(rb, rbr)
 
 	assert.NoError(r.Close())
+}
+
+func TestWriteAndReadGobLocal(t *testing.T) {
+	assert := assert.New(t)
+
+	var buf bytes.Buffer
+	// write gob
+	m := model{"unexported string", "Exported string"}
+	e := gob.NewEncoder(&buf).Encode(m)
+	assert.NoError(e)
+	// write bytes
+	rb := RandBytes(2)
+	n, e := buf.Write(rb)
+	assert.NoError(e)
+	assert.Equal(len(rb), n)
+
+	// read gob
+	var mr model
+	e = gob.NewDecoder(&buf).Decode(&mr)
+	assert.NoError(e)
+	assert.Equal(m.Exported, mr.Exported)
+	// read bytes
+	rbr, e := ioutil.ReadAll(&buf)
+	assert.NoError(e)
+	assert.Equal(rb, rbr)
 }
 
 func TestMain(m *testing.M) {
