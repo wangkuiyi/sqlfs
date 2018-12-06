@@ -3,11 +3,9 @@ package sqlfs
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
@@ -46,58 +44,48 @@ func TestWriterCreate(t *testing.T) {
 	assert.NoError(DropTable(testDB, fn))
 }
 
-func TestWriteAndRead(t *testing.T) {
-	assert := assert.New(t)
+func writeAndRead(t *testing.T, block, size int) {
+	a := assert.New(t)
 
 	fn := fmt.Sprintf("sqlfs.unitest%d", rand.Int())
 
 	w, e := Create(testDB, fn)
-	assert.NoError(e)
-	assert.NotNil(w)
+	a.NoError(e)
+	a.NotNil(w)
 
-	// A small output.
-	buf := []byte("\n\n\n")
-	n, e := w.Write(buf)
-	assert.NoError(e)
-	assert.Equal(len(buf), n)
-
-	// A big output.
-	buf = make([]byte, kBufSize+1)
-	for i := range buf {
-		buf[i] = 'x'
+	buf := make([]byte, size)
+	for i := 0; i < size; i++ {
+		buf[i] = byte('x')
 	}
-	n, e = w.Write(buf)
-	assert.NoError(e)
-	assert.Equal(len(buf), n)
-
-	assert.NoError(w.Close())
+	for b := 0; b < block; b++ {
+		n, e := w.Write(buf)
+		a.NoError(e)
+		a.Equal(size, n)
+	}
+	a.NoError(w.Close())
 
 	r, e := Open(testDB, fn)
-	assert.NoError(e)
-	assert.NotNil(r)
+	a.NoError(e)
+	a.NotNil(r)
 
-	// A small read
-	buf = make([]byte, 2)
-	n, e = r.Read(buf)
-	assert.NoError(e)
-	assert.Equal(2, n)
-	assert.Equal(2, strings.Count(string(buf), "\n"))
+	for b := 0; b < block; b++ {
+		n, e := r.Read(buf)
+		a.NoError(e)
+		a.Equal(size, n)
+		for i := 0; i < size; i++ {
+			a.Equal(byte('x'), buf[i])
+		}
+	}
 
-	// A big read of rest
-	buf = make([]byte, kBufSize*2)
-	n, e = r.Read(buf)
-	assert.Equal(io.EOF, e)
-	assert.Equal(kBufSize+2, n)
-	assert.Equal(1, strings.Count(string(buf), "\n"))
-	assert.Equal(kBufSize+1, strings.Count(string(buf), "x"))
+	a.NoError(r.Close())
+	a.NoError(DropTable(testDB, fn))
+}
 
-	// Another big read
-	n, e = r.Read(buf)
-	assert.Equal(io.EOF, e)
-	assert.Equal(0, n)
-	assert.NoError(r.Close())
-
-	assert.NoError(DropTable(testDB, fn))
+func TestWriteAndRead(t *testing.T) {
+	for b := 0; b <= 100; b += 50 {
+		t.Logf("TestWriteAndRead: writeAndRead(t, %d, %d)\n", b, 100-b)
+		writeAndRead(t, b, 100-b)
+	}
 }
 
 func TestMain(m *testing.M) {
